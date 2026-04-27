@@ -1,0 +1,42 @@
+default_language_version:
+  python: python3.12
+
+repos:
+  - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(.idea/|.venv/|env/|\.git/|__pycache__/|\.env$|build/|dist/|migrations/|\.md$)
+
+      - id: end-of-file-fixer
+        exclude: ^(.idea/|.venv/|env/|\.git/|__pycache__/|\.env$|build/|dist/|migrations/)
+
+      - id: detect-private-key
+        exclude: ^(.idea/|.venv/|env/|\.git/|__pycache__/|\.env$|build/|dist/|migrations/)
+
+      - id: check-ast
+        exclude: ^(.idea/|.venv/|env/|\.git/|__pycache__/|\.env$|build/|dist/|migrations/)
+
+      - id: check-added-large-files
+        exclude: ^(.idea/|.venv/|env/|\.git/|__pycache__/|\.env$|build/|dist/|migrations/)
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.6
+    hooks:
+      - id: ruff-check
+        args: [ --fix ]
+
+  - repo: https://github.com/psf/black
+    rev: 26.3.1
+    hooks:
+      - id: black
+        language_version: python3.12
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        args: [--config-file=pyproject.toml]
+        types: [python]
+        exclude: ".git.*"
+        require_serial: true
