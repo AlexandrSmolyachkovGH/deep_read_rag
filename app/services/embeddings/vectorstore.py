@@ -1,13 +1,13 @@
 """Vector handling."""
 
 from langchain_core.documents.base import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain_qdrant import QdrantVectorStore
-from langchain_core.embeddings import Embeddings
 from qdrant_client import QdrantClient
 
-from app.settings.settings import settings
 from app.services.embeddings.embeddings import EmbCliFactory
+from app.settings.settings import settings
 
 
 class VectorStore:
@@ -28,7 +28,8 @@ class VectorStore:
         return self.embeddings
 
     def get_embeddings(self) -> Embeddings:
-        """Return Embeddings client.
+        """
+        Return Embeddings client.
         If not exists - lazy create initially.
         """
         if not self.embeddings:
@@ -42,7 +43,8 @@ class VectorStore:
         return self.client
 
     def get_client(self) -> QdrantClient:
-        """Return Qdrant client.
+        """
+        Return Qdrant client.
         If not exists - lazy create initially.
         """
         if not self.client:
@@ -71,7 +73,7 @@ class VectorStore:
             collection_name=collection_name,
         )
         await vector_store.aadd_documents(
-            documents=documents
+            documents=documents,
         )
 
     async def retrieve_documents(
@@ -80,10 +82,10 @@ class VectorStore:
         question: str,
         search_type: str = "similarity",
     ) -> list[Document]:
-        """Retrieve similar documents.
+        """
+        Retrieve similar documents.
         Compare vectors using search_type = 'similarity' by default.
         """
-
         vector_store: QdrantVectorStore = self.get_vector_store(
             collection_name=collection_name,
         )
@@ -92,9 +94,11 @@ class VectorStore:
             search_kwargs={
                 "k": settings.doc_settings.TOP_K,
                 "fetch_k": settings.doc_settings.TOP_K * 2,
-            }
+            },
         )
         docs: list[Document] = await retriever.ainvoke(question)
 
         return docs
 
+
+vector_store = VectorStore()
