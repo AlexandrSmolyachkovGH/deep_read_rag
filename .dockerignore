@@ -33,3 +33,5 @@ node_modules
 dist
 build
 *.egg-info
+
+temp_file_dir

@@ -1,9 +1,10 @@
 services:
+
   api:
     build: .
     container_name: rag_api
     ports:
-      - "8001:8000"
+      - "8002:8000"
     env_file:
       - .env
     depends_on:
@@ -11,6 +12,32 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+      pg:
+        condition: service_healthy
+
+    entrypoint:
+      ["./app/scripts/migration.sh"]
+
+  pg:
+    image: postgres:17.7
+    container_name: pg
+    ports:
+      - "${POSTGRES_PORT_OUTER}:${POSTGRES_PORT_INNER}"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -21,7 +48,7 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:6333" ]
+      test: ["CMD", "bash", "-c", "</dev/tcp/localhost/6333"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,11 +62,50 @@ services:
       - ollama_data:/root/.ollama
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:11434" ]
+      test: ["CMD", "bash", "-c", "</dev/tcp/localhost/11434"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    env_file:
+      - .env
+    environment:
+      OLLAMA_HOST: ${MODEL_URL}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: >
+      sh -c "
+      set -ex
+      echo MODEL_TYPE=$MODEL_TYPE
+      echo MODEL_URL=$MODEL_URL
+
+      if [ -z \"$MODEL_TYPE\" ]; then
+        echo 'MODEL_TYPE is empty!'
+        exit 1
+      fi
+
+      export OLLAMA_HOST=$MODEL_URL
+
+      echo 'Connecting to:' $OLLAMA_HOST
+      echo 'Pulling model:' $MODEL_TYPE
+
+      ollama pull $MODEL_TYPE
+
+      echo 'Pulling model:' $LLM_MODEL
+
+      ollama pull $LLM_MODEL
+
+      echo 'Models after pull:'
+      ollama list
+      "
+
 volumes:
+  pg_data:
   qdrant_data:
   ollama_data:
