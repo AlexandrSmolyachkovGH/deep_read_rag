@@ -1,28 +1,30 @@
 """Interface for Embedding Service."""
 
+from collections.abc import Callable
 from enum import StrEnum
-from typing import Callable
 
 from langchain_core.embeddings import Embeddings
 from langchain_ollama.embeddings import OllamaEmbeddings
 
-from app.settings.settings import settings
-
 
 class EmbModel(StrEnum):
     """Allowed models implemented for the service."""
+
     ollama = "ollama"
 
 
-def create_ollama() -> OllamaEmbeddings:
+def create_ollama(
+    model: str,
+    base_url: str,
+) -> OllamaEmbeddings:
     """Create ollama client."""
     return OllamaEmbeddings(
-        model=settings.doc_settings.MODEL_TYPE,
-        base_url=settings.doc_settings.MODEL_URL,
+        model=model,
+        base_url=base_url,
     )
 
 
-embedding_models: dict[str, Callable[[], Embeddings]] = {
+embedding_models: dict[str, Callable[..., Embeddings]] = {
     "ollama": create_ollama,
 }
 
@@ -33,14 +35,16 @@ class EmbCliFactory:
     def set_model(
         self,
         model: EmbModel,
+        model_type: str,
+        base_url: str,
     ) -> Embeddings:
         """Set embedding model."""
-        factory: Callable[[], Embeddings] | None = embedding_models.get(
-            model,
-            None,
-        )
+        factory: Callable[..., Embeddings] | None = embedding_models.get(model)
 
         if not factory:
             raise ValueError("Wrong embedding model")
 
-        return factory()
+        return factory(
+            model=model_type,
+            base_url=base_url,
+        )

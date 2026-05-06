@@ -1,10 +1,18 @@
 """Vector handling."""
 
+import asyncio
+import uuid
+
 from langchain_core.documents.base import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    PointStruct,
+    VectorParams,
+)
 
 from app.services.embeddings.embeddings import EmbCliFactory
 from app.settings.settings import settings
@@ -23,6 +31,8 @@ class VectorStore:
         factory = EmbCliFactory()
         self.embeddings = factory.set_model(
             model=settings.doc_settings.EMBEDDING_MODEL,
+            model_type=settings.doc_settings.MODEL_TYPE,
+            base_url=settings.doc_settings.MODEL_URL,
         )
 
         return self.embeddings
@@ -52,11 +62,60 @@ class VectorStore:
 
         return self.client
 
-    def get_vector_store(
+    def collection_ensure(
+        self,
+        collection_name: str,
+    ) -> None:
+        """Check collection. Create new if collection not found."""
+        client = self.get_client()
+        collections = client.get_collections().collections
+        names = [c.name for c in collections]
+
+        if collection_name not in names:
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=settings.doc_settings.EMBEDDING_SIZE,
+                    distance=Distance.COSINE,
+                ),
+            )
+
+    async def async_coll_ensure(
+        self,
+        collection_name: str,
+    ) -> None:
+        """Async wrapper for collection_ensure."""
+        await asyncio.to_thread(
+            self.collection_ensure,
+            collection_name=collection_name,
+        )
+
+    async def _embed_documents_batch(
+        self,
+        documents: list[Document],
+    ) -> tuple[list[list[float]], list[dict]]:
+        """Batch embedding for documents."""
+        embeddings = self.get_embeddings()
+
+        texts = [doc.page_content for doc in documents]
+        metadata = [doc.metadata for doc in documents]
+
+        vectors = await asyncio.to_thread(
+            embeddings.embed_documents,
+            texts,
+        )
+
+        return vectors, metadata
+
+    async def get_vector_store(
         self,
         collection_name: str,
     ) -> QdrantVectorStore:
         """Return QdrantVectorStore with proper settings."""
+        await self.async_coll_ensure(
+            collection_name=collection_name,
+        )
+
         return QdrantVectorStore(
             client=self.get_client(),
             embedding=self.get_embeddings(),
@@ -69,12 +128,35 @@ class VectorStore:
         documents: list[Document],
     ) -> None:
         """Convert document to vector."""
-        vector_store: QdrantVectorStore = self.get_vector_store(
+        await self.get_vector_store(
             collection_name=collection_name,
         )
-        await vector_store.aadd_documents(
-            documents=documents,
-        )
+
+        client = self.get_client()
+        BATCH_SIZE = 32
+
+        for i in range(0, len(documents), BATCH_SIZE):
+            batch = documents[i : i + BATCH_SIZE]
+
+            vectors, _ = await self._embed_documents_batch(batch)
+
+            points = [
+                PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=vector,
+                    payload={
+                        "page_content": doc.page_content,
+                        "metadata": doc.metadata,
+                    },
+                )
+                for vector, doc in zip(vectors, batch, strict=True)
+            ]
+
+            await asyncio.to_thread(
+                client.upsert,
+                collection_name=collection_name,
+                points=points,
+            )
 
     async def retrieve_documents(
         self,
@@ -86,14 +168,13 @@ class VectorStore:
         Retrieve similar documents.
         Compare vectors using search_type = 'similarity' by default.
         """
-        vector_store: QdrantVectorStore = self.get_vector_store(
+        vector_store: QdrantVectorStore = await self.get_vector_store(
             collection_name=collection_name,
         )
         retriever: VectorStoreRetriever = vector_store.as_retriever(
             search_type=search_type,
             search_kwargs={
                 "k": settings.doc_settings.TOP_K,
-                "fetch_k": settings.doc_settings.TOP_K * 2,
             },
         )
         docs: list[Document] = await retriever.ainvoke(question)
