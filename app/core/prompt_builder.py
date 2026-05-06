@@ -11,6 +11,7 @@ class PromptBuilder:
         self.base_system: dict[str, str] = {
             "system": (
                 "Ты помощник.\n"
+                "Отвечай грамотно на языке на котором поставлен вопрос.\n"
                 "Отвечай только на основе предоставленного контекста.\n"
                 "Не придумывай информацию и не добавляй ее извне контекста.\n"
                 "Если ответа нет — скажи:\n"
@@ -27,7 +28,6 @@ class PromptBuilder:
         system: dict[str, str] | None = None,
     ) -> str:
         """Create structured prompt for LLM."""
-
         if not system:
             system = self.base_system
 
@@ -44,11 +44,7 @@ class PromptBuilder:
                 "file_name",
                 "unknown",
             )
-            context_prompt += (
-                f"[Источник: {file_name}]\n"
-                f"{doc.page_content}"
-
-            )
+            context_prompt += f"[Источник: {file_name}]\n{doc.page_content}"
 
             context_prompt += self.chunk_delimiter
 
