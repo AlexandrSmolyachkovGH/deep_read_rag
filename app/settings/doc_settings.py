@@ -13,6 +13,8 @@ class DocumentSettings(Base):
     MODEL_URL: str
     MODEL_TYPE: str
     TOP_K: int
+    EMBEDDING_SIZE: int
+    LLM_MODEL: str
 
 
 doc_settings = DocumentSettings()
